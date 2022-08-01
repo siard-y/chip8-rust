@@ -3,7 +3,7 @@ use sfml::{
         Color, Rect, RectangleShape, RenderTarget, RenderWindow, Shape, Transformable,
     },
     system::Vector2,
-    window::{ContextSettings, Event, Style},
+    window::{ContextSettings, Event, Style, Key},
 };
 
 use std::{env, fs::File, io::Read, thread, time};
@@ -173,12 +173,24 @@ impl Chip8 {
                     0xA1 => self.sknp_vx(second_num),
                     _ => {},
                 }
-            }
+            },
+            0xF => {
+                match last_two {
+                    0x07 => self.ld_vx_dt(second_num),
+                    0x0A => self.ld_vx_k(second_num),
+                    0x15 => self.ld_dt_vx(second_num),
+                    0x18 => self.ld_st_vx(second_num),
+                    0x1E => self.add_i_vx(second_num),
+                    0x29 => self.ld_f_vx(second_num),
+                    0x33 => self.ld_vx(second_num),
+                    0x55 => self.ld_i_vx(second_num),
+                    0x65 => self.ld_vx_i(second_num),
+                    _ => {},
+                }
+            },
             _ => {},
-        }
-        
-        
-        thread::sleep(time::Duration::from_millis(15));
+        }       
+        // thread::sleep(time::Duration::from_millis(1));
     }
 
     fn cls(&mut self) {
@@ -313,7 +325,6 @@ impl Chip8 {
                     }
                 }
             }
-
             // for y in 0..32 {
             //     for x in 0..64 {
             //         let a = self.gfx[y][x];
@@ -322,7 +333,6 @@ impl Chip8 {
             //     }
             //     println!("");
             // }
-
             // println!("\n");
 
             self.draw_enabled = true;
@@ -330,17 +340,71 @@ impl Chip8 {
     }
 
     fn skp_vx(&mut self, x: u16) {
-
+        if self.key[self.V[x as usize] as usize] == 1 {
+            self.pc += 2;    
+        }
     }
 
     fn sknp_vx(&mut self, x: u16) {
-        
+        if self.key[self.V[x as usize] as usize] == 0 {
+            self.pc += 2;    
+        }
     }
 
+    fn ld_vx_dt(&mut self, x: u16) {
+        self.V[x as usize] = self.delay_timer;
+    }
 
+    fn ld_vx_k(&mut self, x: u16) {
+        let mut key_pressed = false;
 
+        while !key_pressed {
+            for i in 0..16 {
+                if self.key[i] == 1 {
+                    self.V[x as usize] = self.key[i];
+                    key_pressed = true;
+                }
+            }
+        }
+    }
 
+    fn ld_dt_vx(&mut self, x: u16) {
+        self.delay_timer = self.V[x as usize];
+    }
 
+    fn ld_st_vx(&mut self, x: u16) {
+        self.sound_timer = self.V[x as usize];
+    }
+
+    fn add_i_vx(&mut self, x: u16) {
+        self.I += self.V[x as usize] as u16;
+    }
+    
+    fn ld_f_vx(&mut self, x: u16) {
+        self.I = self.V[x as usize] as u16 * 5;
+    }
+
+    fn ld_vx(&mut self, x: u16) {
+        let hundreds = x / 100;
+        let tens = x / 10 % 10;
+        let ones = x % 100 % 10;
+
+        self.memory[self.I as usize] = hundreds as u8;
+        self.memory[self.I as usize + 1] = tens as u8;
+        self.memory[self.I as usize + 2] = ones as u8;
+    }
+git 
+    fn ld_i_vx(&mut self, x: u16) {
+        for i in 0..=x as usize{
+            self.memory[self.I as usize + i] = self.V[i];
+        }
+    }
+
+    fn ld_vx_i(&mut self, x: u16) {
+        for i in 0..=x as usize{
+            self.V[i] = self.memory[self.I as usize + i];
+        }
+    }
 
 }
 
@@ -373,8 +437,21 @@ fn main() {
             }
         }
 
-
         chip8.clockcycle();
+
+        let keypad = [
+            Key::NUM1, Key::NUM2, Key::NUM3, Key::NUM4,
+            Key::Q,    Key::W,    Key::E,    Key::R,
+            Key::A,    Key::S,    Key::D,    Key::F,
+            Key::Z,    Key::X,    Key::C,    Key::V
+        ];
+
+        for i in 0..16 {
+            chip8.key[i] = keypad[i].is_pressed() as u8;
+        }
+
+        let aa = chip8.key[0];
+        println!("{aa}");
 
         rw.clear(Color::BLACK);
 
@@ -385,8 +462,8 @@ fn main() {
             for x in 0..64 {
 
 
-                shape.set_outline_color(Color::WHITE);
-                shape.set_outline_thickness(1.0);
+                // shape.set_outline_color(Color::WHITE);
+                // shape.set_outline_thickness(1.0);
                 shape.set_fill_color(Color::BLACK);
                 shape.set_size((PIXEL_WH as f32, PIXEL_WH as f32));
                 shape.set_position((
