@@ -1,0 +1,30 @@
+Memory:
+  4 kB (4096 B) direct access
+
+Display:
+  64 x 32 pixels monochrome
+
+A program counter ("PC"). Points at the current instruction in memory.
+
+One 16-bit index register ("I"). Points at locations in memory.
+
+A stack for 16-bit addresses. Used to call subroutines/functions and return from them.
+
+An 8-bit delay timer decrementing at a rate of 60 Hz until 0
+
+An 8-bit sound timer. Functions like the delay timer, but beeps if not 0
+
+16 1 byte (8 bit) general-purpose variable registers numbered 0 through F hex (0-15 in decimal). Named V0, V1, V2, V3, V4, V5, V6, V7, V8, V9, VA, VB, VC, VD, VE, VF
+VF is also used as a flag register; many instructions will set it to either 1 or 0 based on some rule, for example using it as a carry flag
+
+
+
+- 1x  4kB RAM
+- 1x  64x32 display, monochrome
+- 1x  PC / Program Counter
+- 1x  I (16-bit Index register)
+- 1x  stack for 16-bit-addresses
+- 1x  8-bit delay timer (60Hz decrement towards 0)
+- 1x  8-bit sound timer
+- 16x 8-bit hex GP registers. Named V0-VF
+- 1x Flag register (VF)
