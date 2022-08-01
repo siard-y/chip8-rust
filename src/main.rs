@@ -458,12 +458,8 @@ fn main() {
         let mut shape = RectangleShape::default();
         shape.set_fill_color(Color::TRANSPARENT);
 
-        for y in 0..32 {
-            for x in 0..64 {
-
-
-                // shape.set_outline_color(Color::WHITE);
-                // shape.set_outline_thickness(1.0);
+        for y in 0..DP_HEIGHT as usize {
+            for x in 0..DP_WIDTH as usize {
                 shape.set_fill_color(Color::BLACK);
                 shape.set_size((PIXEL_WH as f32, PIXEL_WH as f32));
                 shape.set_position((
