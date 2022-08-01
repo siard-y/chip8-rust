@@ -393,7 +393,7 @@ impl Chip8 {
         self.memory[self.I as usize + 1] = tens as u8;
         self.memory[self.I as usize + 2] = ones as u8;
     }
-git 
+    
     fn ld_i_vx(&mut self, x: u16) {
         for i in 0..=x as usize{
             self.memory[self.I as usize + i] = self.V[i];
