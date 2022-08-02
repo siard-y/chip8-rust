@@ -23,7 +23,7 @@ struct Chip8 {
     V: [u8; 16],
     I: u16,
     pc: u16,
-    pub gfx: [[u8; 64]; 32],
+    gfx: [[u8; 64]; 32],
     delay_timer: u8,
     sound_timer: u8,
     stack: [u16; 16],
