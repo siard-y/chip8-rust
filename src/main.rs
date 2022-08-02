@@ -10,8 +10,11 @@ use sfml::{
     // TODO: audio::{Sound, SoundBuffer}
 };
 
-use std::{env, fs::File, io::Read, thread};
+use std::{env, fs::File, io::Read, thread, time};
 use rand::Rng;
+
+// TODO: Make this externally configurable
+const CLOCK_SLEEP: u64 = 1000/800;
 
 
 struct Chip8 {
@@ -117,7 +120,7 @@ impl Chip8 {
     }    
 
     
-    pub fn clockcycle(&mut self) {
+    pub fn clockcycle(&mut self, sleep_time_ms: u64) {
         // fetch
         let mem_pc1 = self.memory[self.pc as usize] as u16;
         let mem_pc2 = self.memory[self.pc as usize + 1] as u16;
@@ -197,7 +200,7 @@ impl Chip8 {
             },
             _ => {},
         }       
-        // thread::sleep(time::Duration::from_millis(1000/800));
+        thread::sleep(time::Duration::from_millis(sleep_time_ms));
     }
 
     fn cls(&mut self) {
@@ -421,7 +424,7 @@ fn main() {
             }
         }
 
-        chip8.clockcycle();
+        chip8.clockcycle(CLOCK_SLEEP);
 
         let keypad = [
             Key::NUM1, Key::NUM2, Key::NUM3, Key::NUM4,
