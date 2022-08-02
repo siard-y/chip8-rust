@@ -4,6 +4,7 @@ use sfml::{
     },
     system::Vector2,
     window::{ContextSettings, Event, Style, Key},
+    audio::{Sound, SoundBuffer}
 };
 
 use std::{env, fs::File, io::Read, thread, time};
@@ -11,8 +12,8 @@ use rand::Rng;
 
 
 struct Chip8 {
-    pub opcode: u16,
-    pub memory: [u8; 4096],
+    opcode: u16,
+    memory: [u8; 4096],
     V: [u8; 16],
     I: u16,
     pc: u16,
@@ -21,8 +22,7 @@ struct Chip8 {
     sound_timer: u8,
     stack: [u16; 16],
     sp: u16,
-    key: [u8; 16],
-    pub draw_enabled: bool
+    key: [u8; 16]
 }
 
 const FONTSET: [u8; 80] = [ 
@@ -109,8 +109,7 @@ impl Chip8 {
             sound_timer: 0,
             stack: [0; 16],
             sp: 0,
-            key: [0; 16],
-            draw_enabled: false
+            key: [0; 16]
         }
 
     }    
@@ -131,6 +130,21 @@ impl Chip8 {
         let last_num = parse_nr(4, oc);
         let last_two = parse_last_nrs(2, oc);
         let last_three = parse_last_nrs(3, oc);
+
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+
+        if self.sound_timer != 0 {
+            self.sound_timer -= 1;
+        }
+
+        // if self.cycles == 0 {
+        //     if self.delay_timer > 0 {
+        //         self.delay_timer -= 1;
+        //     }
+        //     self.cycles = 12;
+        // }
 
         // println!("{oc:x} {first_num:x} {second_num:x} {third_num:x} {last_num:x} {last_two:x} {last_three:x}");
 
@@ -190,7 +204,7 @@ impl Chip8 {
             },
             _ => {},
         }       
-        // thread::sleep(time::Duration::from_millis(1));
+        thread::sleep(time::Duration::from_millis(1000/800));
     }
 
     fn cls(&mut self) {
@@ -198,8 +212,8 @@ impl Chip8 {
     }
 
     fn ret(&mut self) {
-        self.pc = self.stack[self.sp as usize];
         self.sp -= 1;
+        self.pc = self.stack[self.sp as usize];
     }
 
     fn jmp(&mut self, nnn: u16) {
@@ -235,7 +249,7 @@ impl Chip8 {
     } 
 
     fn add_vx_b(&mut self, x: u16, kk: u16) {
-        self.V[x as usize] += kk as u8;
+        self.V[x as usize] = self.V[x as usize].wrapping_add(kk as u8);
     }
 
     fn ld_vx_vy(&mut self, x: u16, y: u16) {
@@ -268,7 +282,7 @@ impl Chip8 {
         let vy = self.V[y as usize];
 
         self.V[0xF] = if vx > vy {1} else {0};
-        self.V[x as usize] -= self.V[y as usize];
+        self.V[x as usize] = self.V[x as usize].wrapping_sub(self.V[y as usize]);
     }
 
     fn shr(&mut self, x: u16) {
@@ -278,7 +292,7 @@ impl Chip8 {
 
     fn subn(&mut self, x: u16, y: u16) {
         self.V[0xF] = if self.V[y as usize] > self.V[y as usize] {1} else {0};
-        self.V[x as usize] -= self.V[y as usize];
+        self.V[x as usize] = self.V[x as usize].wrapping_sub(self.V[y as usize]);
     }
 
     fn shl(&mut self, x: u16) {
@@ -306,37 +320,29 @@ impl Chip8 {
     }
 
     fn draw(&mut self, x: u16, y: u16, n: u16) {
-        let x_coord = self.V[x as usize]%64;
-            let y_coord = self.V[y as usize]%32;
-            let height = n as u8;
+        self.V[0xF] = 0;
 
-            self.V[0xF] = 0;
-
-            for ydir in 0..height {
-                let pixel = self.memory[self.I as usize + ydir as usize];
-                for xdir in 0..8 {
-                    let xdraw = xdir as usize + x_coord as usize;
-                    let ydraw = ydir as usize + y_coord as usize;
-                    if pixel & (0x80 >> xdir) != 0 {
-                        if self.gfx[ydraw][xdraw] == 1 {
-                            self.V[0xF] = 1;
-                        } 
-                        self.gfx[ydraw][xdraw] ^= 1;
-                    }
-                }
+        for ydir in 0..n {
+            let cur = self.memory[self.I as usize + ydir as usize];
+            let y_coord = (self.V[y as usize] + ydir as u8) % 32;
+            for xdir in 0..8 {
+                let x_coord = (self.V[x as usize] + xdir as u8) % 64;
+                let cell = (cur >> (7 - xdir)) & 1;
+                self.V[0xF] |= cell & self.gfx[y_coord as usize][x_coord as usize];
+                self.gfx[y_coord as usize][x_coord as usize] ^= cell;
             }
-            // for y in 0..32 {
-            //     for x in 0..64 {
-            //         let a = self.gfx[y][x];
-            //         let b = if a == 0 {"."} else {"*"};
-            //         print!("{b}");
-            //     }
-            //     println!("");
-            // }
-            // println!("\n");
+        }
+        // for y in 0..32 {
+        //     for x in 0..64 {
+        //         let a = self.gfx[y][x];
+        //         let b = if a == 0 {"."} else {"*"};
+        //         print!("{b}");
+        //     }
+        //     println!("");
+        // }
+        // println!("\n");
 
-            self.draw_enabled = true;
-            // self.pc += 2;
+        // self.draw_enabled = true;
     }
 
     fn skp_vx(&mut self, x: u16) {
@@ -358,14 +364,26 @@ impl Chip8 {
     fn ld_vx_k(&mut self, x: u16) {
         let mut key_pressed = false;
 
-        while !key_pressed {
-            for i in 0..16 {
-                if self.key[i] == 1 {
-                    self.V[x as usize] = self.key[i];
-                    key_pressed = true;
-                }
+        for i in 0..16 {
+            if self.key[i] == 1 {
+                self.V[x as usize] = self.key[i];
+                key_pressed = true;
             }
         }
+
+        while !key_pressed {
+            // Decrement program counter by 2 to halt advancement
+            self.pc -= 2;
+        }
+
+        // while !key_pressed {
+        //     for i in 0..16 {
+        //         if self.key[i] == 1 {
+        //             self.V[x as usize] = self.key[i];
+        //             key_pressed = true;
+        //         }
+        //     }
+        // }
     }
 
     fn ld_dt_vx(&mut self, x: u16) {
@@ -393,7 +411,7 @@ impl Chip8 {
         self.memory[self.I as usize + 1] = tens as u8;
         self.memory[self.I as usize + 2] = ones as u8;
     }
-    
+
     fn ld_i_vx(&mut self, x: u16) {
         for i in 0..=x as usize{
             self.memory[self.I as usize + i] = self.V[i];
@@ -409,17 +427,12 @@ impl Chip8 {
 }
 
 
-
-
 fn main() {
     let args: Vec<String> = env::args().collect();
 
     let filepath = &args[1];
 
     let mut chip8 = Chip8::new(filepath);
-
-
-
 
 
     let mut rw = RenderWindow::new(
@@ -449,9 +462,6 @@ fn main() {
         for i in 0..16 {
             chip8.key[i] = keypad[i].is_pressed() as u8;
         }
-
-        let aa = chip8.key[0];
-        println!("{aa}");
 
         rw.clear(Color::BLACK);
 
