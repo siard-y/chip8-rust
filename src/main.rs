@@ -1,13 +1,16 @@
 use sfml::{
     graphics::{
-        Color, Rect, RectangleShape, RenderTarget, RenderWindow, Shape, Transformable,
+        Color, RectangleShape, RenderTarget,
+        RenderWindow, Shape, Transformable
     },
-    system::Vector2,
-    window::{ContextSettings, Event, Style, Key},
-    audio::{Sound, SoundBuffer}
+    window::{
+        ContextSettings, Event, 
+        Style, Key
+    },
+    // TODO: audio::{Sound, SoundBuffer}
 };
 
-use std::{env, fs::File, io::Read, thread, time};
+use std::{env, fs::File, io::Read, thread};
 use rand::Rng;
 
 
@@ -44,7 +47,7 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80 
 ];
 
-const DRAW_AREA_TOPLEFT: (u16, u16) = (0, 0);
+const STARTING_POINT: (u16, u16) = (0, 0);
 
 const DP_WIDTH: u8 = 64;
 const DP_HEIGHT: u8 = 32;
@@ -111,7 +114,6 @@ impl Chip8 {
             sp: 0,
             key: [0; 16]
         }
-
     }    
 
     
@@ -138,15 +140,6 @@ impl Chip8 {
         if self.sound_timer != 0 {
             self.sound_timer -= 1;
         }
-
-        // if self.cycles == 0 {
-        //     if self.delay_timer > 0 {
-        //         self.delay_timer -= 1;
-        //     }
-        //     self.cycles = 12;
-        // }
-
-        // println!("{oc:x} {first_num:x} {second_num:x} {third_num:x} {last_num:x} {last_two:x} {last_three:x}");
 
         match first_num {
             0x0 => {match self.opcode {
@@ -204,7 +197,7 @@ impl Chip8 {
             },
             _ => {},
         }       
-        thread::sleep(time::Duration::from_millis(1000/800));
+        // thread::sleep(time::Duration::from_millis(1000/800));
     }
 
     fn cls(&mut self) {
@@ -322,27 +315,17 @@ impl Chip8 {
     fn draw(&mut self, x: u16, y: u16, n: u16) {
         self.V[0xF] = 0;
 
+        // What sleep deprivation does to a mfer
         for ydir in 0..n {
             let cur = self.memory[self.I as usize + ydir as usize];
-            let y_coord = (self.V[y as usize] + ydir as u8) % 32;
+            let y_coord = (self.V[y as usize] as usize + ydir as usize) % 32;
             for xdir in 0..8 {
-                let x_coord = (self.V[x as usize] + xdir as u8) % 64;
+                let x_coord = (self.V[x as usize] as usize + xdir as usize) % 64;
                 let cell = (cur >> (7 - xdir)) & 1;
                 self.V[0xF] |= cell & self.gfx[y_coord as usize][x_coord as usize];
                 self.gfx[y_coord as usize][x_coord as usize] ^= cell;
             }
         }
-        // for y in 0..32 {
-        //     for x in 0..64 {
-        //         let a = self.gfx[y][x];
-        //         let b = if a == 0 {"."} else {"*"};
-        //         print!("{b}");
-        //     }
-        //     println!("");
-        // }
-        // println!("\n");
-
-        // self.draw_enabled = true;
     }
 
     fn skp_vx(&mut self, x: u16) {
@@ -366,24 +349,14 @@ impl Chip8 {
 
         for i in 0..16 {
             if self.key[i] == 1 {
-                self.V[x as usize] = self.key[i];
+                self.V[x as usize] = i as u8;
                 key_pressed = true;
             }
         }
 
-        while !key_pressed {
-            // Decrement program counter by 2 to halt advancement
+        if !key_pressed {
             self.pc -= 2;
         }
-
-        // while !key_pressed {
-        //     for i in 0..16 {
-        //         if self.key[i] == 1 {
-        //             self.V[x as usize] = self.key[i];
-        //             key_pressed = true;
-        //         }
-        //     }
-        // }
     }
 
     fn ld_dt_vx(&mut self, x: u16) {
@@ -429,15 +402,13 @@ impl Chip8 {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-
     let filepath = &args[1];
 
     let mut chip8 = Chip8::new(filepath);
 
-
     let mut rw = RenderWindow::new(
         (640, 320),
-        "CHIP8",
+        "CHIP-8",
         Style::CLOSE,
         &ContextSettings::default(),
     );
@@ -473,8 +444,8 @@ fn main() {
                 shape.set_fill_color(Color::BLACK);
                 shape.set_size((PIXEL_WH as f32, PIXEL_WH as f32));
                 shape.set_position((
-                    DRAW_AREA_TOPLEFT.0 as f32 + (x as f32 * PIXEL_WH as f32),
-                    DRAW_AREA_TOPLEFT.1 as f32 + (y as f32 * PIXEL_WH as f32),
+                    STARTING_POINT.0 as f32 + (x as f32 * PIXEL_WH as f32),
+                    STARTING_POINT.1 as f32 + (y as f32 * PIXEL_WH as f32),
                 ));
                 if chip8.gfx[y][x] == 1 {
                     shape.set_fill_color(Color::WHITE);
