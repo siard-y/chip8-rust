@@ -14,7 +14,7 @@ use std::{env, fs::File, io::Read, thread, time};
 use rand::Rng;
 
 // TODO: Make this externally configurable
-const CLOCK_SLEEP: u64 = 1000/800;
+const CLOCK_SLEEP: u64 = 1000/1000;
 
 
 struct Chip8 {
@@ -136,75 +136,65 @@ impl Chip8 {
         let last_two = parse_last_nrs(2, oc);
         let last_three = parse_last_nrs(3, oc);
 
+        let num_tuple = (first_num, second_num, third_num, last_num);
+
+
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
         }
 
-        if self.sound_timer != 0 {
+        if self.sound_timer > 0 {
             self.sound_timer -= 1;
         }
 
-        match first_num {
-            0x0 => {match self.opcode {
-                0x00e0 => self.cls(),
-                0x00ee => self.ret(),
-                _ => {},
-            }},
-            0x1 => self.jmp(last_three),
-            0x2 => self.call(last_three),
-            0x3 => self.se_vx_b(second_num, last_two),
-            0x4 => self.sne_vx_b(second_num, last_two),
-            0x5 => self.se_vx_vy(second_num, third_num),
-            0x6 => self.ld_vx_b(second_num, last_two),
-            0x7 => self.add_vx_b(second_num, last_two),
-            0x8 => {
-                match last_num {
-                    0x0 => self.ld_vx_vy(second_num, third_num),
-                    0x1 => self.or(second_num, third_num),
-                    0x2 => self.and(second_num, third_num),
-                    0x3 => self.xor(second_num, third_num),
-                    0x4 => self.add_vf(second_num, third_num),
-                    0x5 => self.sub(second_num, third_num),
-                    0x6 => self.shr(second_num),
-                    0x7 => self.subn(second_num, third_num),
-                    0xe => self.shl(second_num),
-                    _ => {},
-                }
-            },
-            0x9 => self.sne(second_num, third_num),
+        match num_tuple {
+            (0x0, _, _, 0x0) => self.cls(),
+            (0x0, _, _, 0xe) => self.ret(),
 
-            0xA => self.ld_i_a(last_three),
-            0xB => self.jmp_v0_a(last_three),
-            0xC => self.rnd(second_num, last_two),
-            0xD => self.draw(second_num, third_num, last_num),
-            0xE => {
-                match last_two {
-                    0x9E => self.skp_vx(second_num),
-                    0xA1 => self.sknp_vx(second_num),
-                    _ => {},
-                }
-            },
-            0xF => {
-                match last_two {
-                    0x07 => self.ld_vx_dt(second_num),
-                    0x0A => self.ld_vx_k(second_num),
-                    0x15 => self.ld_dt_vx(second_num),
-                    0x18 => self.ld_st_vx(second_num),
-                    0x1E => self.add_i_vx(second_num),
-                    0x29 => self.ld_f_vx(second_num),
-                    0x33 => self.ld_vx(second_num),
-                    0x55 => self.ld_i_vx(second_num),
-                    0x65 => self.ld_vx_i(second_num),
-                    _ => {},
-                }
-            },
+            (0x1, _, _, _) => self.jmp(last_three),
+            (0x2, _, _, _) => self.call(last_three),
+            (0x3, _, _, _) => self.se_vx_b(second_num, last_two),
+            (0x4, _, _, _) => self.sne_vx_b(second_num, last_two),
+            (0x5, _, _, _) => self.se_vx_vy(second_num, third_num),
+            (0x6, _, _, _) => self.ld_vx_b(second_num, last_two),
+            (0x7, _, _, _) => self.add_vx_b(second_num, last_two),
+
+            (0x8, _, _, 0x0) => self.ld_vx_vy(second_num, third_num),    
+            (0x8, _, _, 0x1) => self.or(second_num, third_num),
+            (0x8, _, _, 0x2) => self.and(second_num, third_num),
+            (0x8, _, _, 0x3) => self.xor(second_num, third_num),
+            (0x8, _, _, 0x4) => self.add_vf(second_num, third_num),
+            (0x8, _, _, 0x5) => self.sub(second_num, third_num),
+            (0x8, _, _, 0x6) => self.shr(second_num),
+            (0x8, _, _, 0x7) => self.subn(second_num, third_num),
+            (0x8, _, _, 0xe) => self.shl(second_num),
+            (0x8, _, _, 0x9) => self.sne(second_num, third_num),
+
+            (0xA, _, _, _) => self.ld_i_a(last_three),
+            (0xB, _, _, _) => self.jmp_v0_a(last_three),
+            (0xC, _, _, _) => self.rnd(second_num, last_two),
+            (0xD, _, _, _) => self.draw(second_num, third_num, last_num),
+            
+            (0xE, _, 0x9, 0xE) => self.skp_vx(second_num),
+            (0xE, _, 0xA, 0x1) => self.sknp_vx(second_num),
+
+            (0xF, _, 0x0, 0x7) => self.ld_vx_dt(second_num),
+            (0xF, _, 0x0, 0xA) => self.ld_vx_k(second_num),
+            (0xF, _, 0x1, 0x5) => self.ld_dt_vx(second_num),
+            (0xF, _, 0x1, 0x8) => self.ld_st_vx(second_num),
+            (0xF, _, 0x1, 0xE) => self.add_i_vx(second_num),
+            (0xF, _, 0x2, 0x9) => self.ld_f_vx(second_num),
+            (0xF, _, 0x3, 0x3) => self.ld_vx(second_num),
+            (0xF, _, 0x5, 0x5) => self.ld_i_vx(second_num),
+            (0xF, _, 0x6, 0x5) => self.ld_vx_i(second_num),
+            
             _ => {},
         }       
         thread::sleep(time::Duration::from_millis(sleep_time_ms));
     }
 
     fn cls(&mut self) {
-        self.gfx = [[0; 64]; 32]
+        self.gfx = [[0; 64]; 32];
     }
 
     fn ret(&mut self) {
@@ -401,7 +391,6 @@ impl Chip8 {
     }
 
 }
-
 
 fn main() {
     let args: Vec<String> = env::args().collect();
