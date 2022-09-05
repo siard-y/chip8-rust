@@ -1,7 +1,7 @@
 use sfml::{
     graphics::{
         Color, RectangleShape, RenderTarget,
-        RenderWindow, Shape, Transformable
+        RenderWindow, Shape, Transformable, Drawable
     },
     window::{
         ContextSettings, Event, 
@@ -12,6 +12,7 @@ use sfml::{
 
 use std::{env, fs::File, io::Read, thread, time};
 use rand::Rng;
+
 
 // TODO: Make this externally configurable
 const CLOCK_SLEEP: u64 = 1000/1000;
@@ -125,7 +126,7 @@ impl Chip8 {
         let mem_pc1 = self.memory[self.pc as usize] as u16;
         let mem_pc2 = self.memory[self.pc as usize + 1] as u16;
         self.opcode = mem_pc1 << 8 | mem_pc2;
-        self.pc += 2;
+        self.pc = self.pc + 2;
 
         let oc = self.opcode;
 
@@ -137,15 +138,6 @@ impl Chip8 {
         let last_three = parse_last_nrs(3, oc);
 
         let num_tuple = (first_num, second_num, third_num, last_num);
-
-
-        if self.delay_timer > 0 {
-            self.delay_timer -= 1;
-        }
-
-        if self.sound_timer > 0 {
-            self.sound_timer -= 1;
-        }
 
         match num_tuple {
             (0x0, _, _, 0x0) => self.cls(),
@@ -168,7 +160,7 @@ impl Chip8 {
             (0x8, _, _, 0x6) => self.shr(second_num),
             (0x8, _, _, 0x7) => self.subn(second_num, third_num),
             (0x8, _, _, 0xe) => self.shl(second_num),
-            (0x8, _, _, 0x9) => self.sne(second_num, third_num),
+            (0x9, _, _, 0x0) => self.sne(second_num, third_num),
 
             (0xA, _, _, _) => self.ld_i_a(last_three),
             (0xB, _, _, _) => self.jmp_v0_a(last_three),
@@ -188,9 +180,11 @@ impl Chip8 {
             (0xF, _, 0x5, 0x5) => self.ld_i_vx(second_num),
             (0xF, _, 0x6, 0x5) => self.ld_vx_i(second_num),
             
-            _ => {},
+            _ => {
+                println!("Error, opcode: {oc}");
+            },
         }       
-        thread::sleep(time::Duration::from_millis(sleep_time_ms));
+        // thread::sleep(time::Duration::from_millis(sleep_time_ms));
     }
 
     fn cls(&mut self) {
@@ -198,7 +192,7 @@ impl Chip8 {
     }
 
     fn ret(&mut self) {
-        self.sp -= 1;
+        self.sp = self.sp - 1;
         self.pc = self.stack[self.sp as usize];
     }
 
@@ -208,25 +202,25 @@ impl Chip8 {
 
     fn call(&mut self, nnn: u16) {
         self.stack[self.sp as usize] = self.pc;
-        self.sp += 1;
+        self.sp = self.sp + 1;
         self.pc = nnn;
     }
 
     fn se_vx_b(&mut self, x: u16, kk: u16) {
         if self.V[x as usize] == kk as u8 {
-            self.pc += 2;
+            self.pc = self.pc + 2;
         }
     }
 
     fn sne_vx_b(&mut self, x: u16, kk: u16) {
         if self.V[x as usize] != kk as u8 {
-            self.pc += 2;
+            self.pc = self.pc + 2;
         }
     }
 
     fn se_vx_vy(&mut self, x: u16, y: u16) {
         if self.V[x as usize] == self.V[y as usize] {
-            self.pc += 2;
+            self.pc = self.pc + 2;
         }
     }
 
@@ -243,7 +237,7 @@ impl Chip8 {
     }
 
     fn or(&mut self, x: u16, y: u16) {
-        self.V[x as usize] |= self.V[y as usize]; 
+        self.V[x as usize] = self.V[x as usize] | self.V[y as usize]; 
     }
 
     fn and(&mut self, x: u16, y: u16) {
@@ -283,12 +277,12 @@ impl Chip8 {
 
     fn shl(&mut self, x: u16) {
         self.V[0xF] = self.V[x as usize] & 0x80 >> 7;
-        self.V[x as usize] *= 2;
+        self.V[x as usize] = self.V[x as usize].wrapping_mul(2);
     }
 
     fn sne(&mut self, x: u16, y: u16) {
         if self.V[x as usize] != self.V[y as usize] {
-            self.pc += 2;
+            self.pc = self.pc + 2;
         }
     }
 
@@ -297,39 +291,65 @@ impl Chip8 {
     }
 
     fn jmp_v0_a(&mut self, nnn: u16) {
-        self.pc += nnn + self.V[0x0] as u16;
+        self.pc = self.pc + nnn + self.V[0x0] as u16;
     }
 
     fn rnd(&mut self, x: u16, kk: u16) {
         let rng_num: u8 = rand::thread_rng().gen::<u8>();
         self.V[x as usize] = rng_num & kk as u8;
     }
-
+    
     fn draw(&mut self, x: u16, y: u16, n: u16) {
-        self.V[0xF] = 0;
+        self.V[0xF] = 0x0;
 
-        // What sleep deprivation does to a mfer
-        for ydir in 0..n {
-            let cur = self.memory[self.I as usize + ydir as usize];
-            let y_coord = (self.V[y as usize] as usize + ydir as usize) % 32;
-            for xdir in 0..8 {
-                let x_coord = (self.V[x as usize] as usize + xdir as usize) % 64;
-                let cell = (cur >> (7 - xdir)) & 1;
-                self.V[0xF] |= cell & self.gfx[y_coord as usize][x_coord as usize];
-                self.gfx[y_coord as usize][x_coord as usize] ^= cell;
+        for row_iter in 0..n as u8 {
+            let mut sprite_iterable = self.memory[self.I as usize + row_iter as usize];
+            let y_coord = (self.V[y as usize] + row_iter) % 32;
+
+            for col_iter in 0..8 as u8 {
+                let sprite_iteration = (sprite_iterable & 0x80) >> 7;
+                let x_coord = (self.V[x as usize] + col_iter) % 64;
+
+                if sprite_iteration == 1 {
+                    match self.gfx[y_coord as usize][x_coord as usize] {
+                        1 => {
+                             self.gfx[y_coord as usize][x_coord as usize] = 0;
+                             self.V[0xF] = 1;
+                        },
+                        _ => self.gfx[y_coord as usize][x_coord as usize] = 1,
+                    }
+                }
+                sprite_iterable <<= 1;
             }
         }
-    }
+    }  
+
+    //
+    // fn draw(&mut self, x: u16, y: u16, n: u16) {
+    //     self.V[0xF] = 0;
+
+    //     // What sleep deprivation does to a mfer
+    //     for ydir in 0..n {
+    //         let cur = self.memory[self.I as usize + ydir as usize];
+    //         let y_coord = (self.V[y as usize] as usize + ydir as usize) % 32;
+    //         for xdir in 0..8 {
+    //             let x_coord = (self.V[x as usize] as usize + xdir as usize) % 64;
+    //             let cell = (cur >> (7 - xdir)) & 1;
+    //             self.V[0xF] |= cell & self.gfx[y_coord as usize][x_coord as usize];
+    //             self.gfx[y_coord as usize][x_coord as usize] ^= cell;
+    //         }
+    //     }
+    // }
 
     fn skp_vx(&mut self, x: u16) {
         if self.key[self.V[x as usize] as usize] == 1 {
-            self.pc += 2;    
+            self.pc = self.pc + 2;    
         }
     }
 
     fn sknp_vx(&mut self, x: u16) {
         if self.key[self.V[x as usize] as usize] == 0 {
-            self.pc += 2;    
+            self.pc = self.pc + 2;    
         }
     }
 
@@ -347,21 +367,29 @@ impl Chip8 {
             }
         }
 
-        if !key_pressed {
-            self.pc -= 2;
+        while !key_pressed {
+            self.pc = self.pc - 2;
         }
     }
 
     fn ld_dt_vx(&mut self, x: u16) {
         self.delay_timer = self.V[x as usize];
+        while self.delay_timer > 0 {
+            self.delay_timer = self.delay_timer - 1;
+            thread::sleep(time::Duration::from_millis(1000/60));
+        }
     }
 
     fn ld_st_vx(&mut self, x: u16) {
         self.sound_timer = self.V[x as usize];
+        while self.sound_timer > 0 {
+            self.sound_timer = self.sound_timer - 1;
+            thread::sleep(time::Duration::from_millis(1000/60));
+        }
     }
 
     fn add_i_vx(&mut self, x: u16) {
-        self.I += self.V[x as usize] as u16;
+        self.I = self.I + self.V[x as usize] as u16;
     }
     
     fn ld_f_vx(&mut self, x: u16) {
@@ -382,12 +410,14 @@ impl Chip8 {
         for i in 0..=x as usize{
             self.memory[self.I as usize + i] = self.V[i];
         }
+        self.I = self.I + x + 1;
     }
 
     fn ld_vx_i(&mut self, x: u16) {
         for i in 0..=x as usize{
             self.V[i] = self.memory[self.I as usize + i];
         }
+        self.I = self.I + x + 1;
     }
 
 }
@@ -405,43 +435,41 @@ fn main() {
         &ContextSettings::default(),
     );
 
-    while rw.is_open() {
-        while let Some(ev) = rw.poll_event() {
-            match ev {
-                Event::Closed => rw.close(),
-                _ => {}
-            }
-        }
-
-        chip8.clockcycle(CLOCK_SLEEP);
-
-        let keypad = [
+    let keypad = [
             Key::NUM1, Key::NUM2, Key::NUM3, Key::NUM4,
             Key::Q,    Key::W,    Key::E,    Key::R,
             Key::A,    Key::S,    Key::D,    Key::F,
             Key::Z,    Key::X,    Key::C,    Key::V
         ];
 
+    while rw.is_open() {
+        chip8.clockcycle(CLOCK_SLEEP);
+
+        while let Some(ev) = rw.poll_event() {
+            match ev {
+                Event::Closed => rw.close(),
+                _ => {}
+            }
+        }       
+
         for i in 0..16 {
             chip8.key[i] = keypad[i].is_pressed() as u8;
         }
 
-        rw.clear(Color::BLACK);
-
         let mut shape = RectangleShape::default();
-        shape.set_fill_color(Color::TRANSPARENT);
 
         for y in 0..DP_HEIGHT as usize {
             for x in 0..DP_WIDTH as usize {
-                shape.set_fill_color(Color::BLACK);
+                // shape.set_fill_color(Color::BLACK);
                 shape.set_size((PIXEL_WH as f32, PIXEL_WH as f32));
                 shape.set_position((
                     STARTING_POINT.0 as f32 + (x as f32 * PIXEL_WH as f32),
                     STARTING_POINT.1 as f32 + (y as f32 * PIXEL_WH as f32),
                 ));
-                if chip8.gfx[y][x] == 1 {
-                    shape.set_fill_color(Color::WHITE);
-                }
+
+                let pixel_color = if chip8.gfx[y][x] == 1 {Color::WHITE} else {Color::BLACK};
+
+                shape.set_fill_color(pixel_color);
                 rw.draw(&shape);
             }
         }
