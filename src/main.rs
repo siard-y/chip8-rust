@@ -1,7 +1,7 @@
 use sfml::{
     graphics::{
         Color, RectangleShape, RenderTarget,
-        RenderWindow, Shape, Transformable, Drawable
+        RenderWindow, Shape, Transformable
     },
     window::{
         ContextSettings, Event, 
@@ -84,7 +84,7 @@ fn parse_last_nrs(amount: u16, opcode: u16) -> u16 {
     match amount {
         2 => opcode << 8 >> 8,
         3 => opcode << 4 >> 4,
-        _ => 0,
+        _ => 0x0,
     }
 }
 
@@ -130,6 +130,7 @@ impl Chip8 {
 
         let oc = self.opcode;
 
+
         let first_num = parse_nr(1, oc);
         let second_num = parse_nr(2, oc);
         let third_num = parse_nr(3, oc);
@@ -140,14 +141,14 @@ impl Chip8 {
         let num_tuple = (first_num, second_num, third_num, last_num);
 
         match num_tuple {
-            (0x0, _, _, 0x0) => self.cls(),
-            (0x0, _, _, 0xe) => self.ret(),
+            (0x0, 0x0, 0xe, 0x0) => self.cls(),
+            (0x0, 0x0, 0xe, 0xe) => self.ret(),
 
             (0x1, _, _, _) => self.jmp(last_three),
             (0x2, _, _, _) => self.call(last_three),
             (0x3, _, _, _) => self.se_vx_b(second_num, last_two),
             (0x4, _, _, _) => self.sne_vx_b(second_num, last_two),
-            (0x5, _, _, _) => self.se_vx_vy(second_num, third_num),
+            (0x5, _, _, 0x0) => self.se_vx_vy(second_num, third_num),
             (0x6, _, _, _) => self.ld_vx_b(second_num, last_two),
             (0x7, _, _, _) => self.add_vx_b(second_num, last_two),
 
@@ -188,7 +189,12 @@ impl Chip8 {
     }
 
     fn cls(&mut self) {
-        self.gfx = [[0; 64]; 32];
+        for y in 0..32 {
+            for x in 0..64 {
+                self.gfx[y as usize][x as usize] = 0;
+            }
+        }
+        // self.gfx = [[0; 64]; 32];
     }
 
     fn ret(&mut self) {
@@ -241,11 +247,11 @@ impl Chip8 {
     }
 
     fn and(&mut self, x: u16, y: u16) {
-        self.V[x as usize] &= self.V[y as usize];
+        self.V[x as usize] = self.V[x as usize] & self.V[y as usize];
     }
 
     fn xor(&mut self, x: u16, y: u16) {
-        self.V[x as usize] ^= self.V[y as usize];
+        self.V[x as usize] = self.V[x as usize] ^ self.V[y as usize];
     }
 
     fn add_vf(&mut self, x: u16, y: u16) {
@@ -267,17 +273,21 @@ impl Chip8 {
 
     fn shr(&mut self, x: u16) {
         self.V[0xF] = self.V[x as usize] & 1;
-        self.V[x as usize] >>= 1;
+        self.V[x as usize] = self.V[x as usize] >> 1;
     }
 
     fn subn(&mut self, x: u16, y: u16) {
-        self.V[0xF] = if self.V[y as usize] > self.V[y as usize] {1} else {0};
-        self.V[x as usize] = self.V[x as usize].wrapping_sub(self.V[y as usize]);
+        self.V[0xF] = 0;
+
+        if self.V[y as usize] > self.V[x as usize] {
+            self.V[0xF] = 1;
+        }
+        self.V[x as usize] = self.V[y as usize].wrapping_sub(self.V[x as usize]);
     }
 
     fn shl(&mut self, x: u16) {
-        self.V[0xF] = self.V[x as usize] & 0x80 >> 7;
-        self.V[x as usize] = self.V[x as usize].wrapping_mul(2);
+        self.V[0xF] = self.V[x as usize] & 0x80;
+        self.V[x as usize] = self.V[x as usize ] << 1;
     }
 
     fn sne(&mut self, x: u16, y: u16) {
@@ -397,27 +407,28 @@ impl Chip8 {
     }
 
     fn ld_vx(&mut self, x: u16) {
-        let hundreds = x / 100;
-        let tens = x / 10 % 10;
-        let ones = x % 100 % 10;
+        let vx = self.V[x as usize];
+        let hundreds = vx / 100;
+        let tens = (vx % 100) / 10;
+        let ones = vx % 10;
 
         self.memory[self.I as usize] = hundreds as u8;
-        self.memory[self.I as usize + 1] = tens as u8;
-        self.memory[self.I as usize + 2] = ones as u8;
+        self.memory[(self.I + 1) as usize] = tens as u8;
+        self.memory[(self.I + 2) as usize] = ones as u8;
     }
 
     fn ld_i_vx(&mut self, x: u16) {
         for i in 0..=x as usize{
             self.memory[self.I as usize + i] = self.V[i];
         }
-        self.I = self.I + x + 1;
+        // self.I += x + 1;
     }
 
     fn ld_vx_i(&mut self, x: u16) {
         for i in 0..=x as usize{
             self.V[i] = self.memory[self.I as usize + i];
         }
-        self.I = self.I + x + 1;
+        // self.I += x + 1;
     }
 
 }
