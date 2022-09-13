@@ -5,8 +5,9 @@ use sfml::{
     },
     window::{
         ContextSettings, Event, 
-        Style, Key
+        Style, Key, VideoMode,
     },
+    system::Vector2i,
     // TODO: audio::{Sound, SoundBuffer}
 };
 
@@ -50,12 +51,6 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0xF0,
     0xF0, 0x80, 0xF0, 0x80, 0x80 
 ];
-
-const STARTING_POINT: (u16, u16) = (0, 0);
-
-const DP_WIDTH: u8 = 64;
-const DP_HEIGHT: u8 = 32;
-const PIXEL_WH: u8 = 10;
 
 
 fn rom_from_file(filepath: &str) -> ([u8; 4096], usize) {
@@ -126,7 +121,7 @@ impl Chip8 {
         let mem_pc1 = self.memory[self.pc as usize] as u16;
         let mem_pc2 = self.memory[self.pc as usize + 1] as u16;
         self.opcode = mem_pc1 << 8 | mem_pc2;
-        self.pc = self.pc + 2;
+        self.pc += 2;
 
         let oc = self.opcode;
 
@@ -189,16 +184,11 @@ impl Chip8 {
     }
 
     fn cls(&mut self) {
-        for y in 0..32 {
-            for x in 0..64 {
-                self.gfx[y as usize][x as usize] = 0;
-            }
-        }
-        // self.gfx = [[0; 64]; 32];
+        self.gfx = [[0; 64]; 32];
     }
 
     fn ret(&mut self) {
-        self.sp = self.sp - 1;
+        self.sp -= 1;
         self.pc = self.stack[self.sp as usize];
     }
 
@@ -208,25 +198,25 @@ impl Chip8 {
 
     fn call(&mut self, nnn: u16) {
         self.stack[self.sp as usize] = self.pc;
-        self.sp = self.sp + 1;
+        self.sp += 1;
         self.pc = nnn;
     }
 
     fn se_vx_b(&mut self, x: u16, kk: u16) {
         if self.V[x as usize] == kk as u8 {
-            self.pc = self.pc + 2;
+            self.pc += 2;
         }
     }
 
     fn sne_vx_b(&mut self, x: u16, kk: u16) {
         if self.V[x as usize] != kk as u8 {
-            self.pc = self.pc + 2;
+            self.pc += 2;
         }
     }
 
     fn se_vx_vy(&mut self, x: u16, y: u16) {
         if self.V[x as usize] == self.V[y as usize] {
-            self.pc = self.pc + 2;
+            self.pc += 2;
         }
     }
 
@@ -243,15 +233,15 @@ impl Chip8 {
     }
 
     fn or(&mut self, x: u16, y: u16) {
-        self.V[x as usize] = self.V[x as usize] | self.V[y as usize]; 
+        self.V[x as usize] |= self.V[y as usize]; 
     }
 
     fn and(&mut self, x: u16, y: u16) {
-        self.V[x as usize] = self.V[x as usize] & self.V[y as usize];
+        self.V[x as usize] &= self.V[y as usize];
     }
 
     fn xor(&mut self, x: u16, y: u16) {
-        self.V[x as usize] = self.V[x as usize] ^ self.V[y as usize];
+        self.V[x as usize] ^= self.V[y as usize];
     }
 
     fn add_vf(&mut self, x: u16, y: u16) {
@@ -273,7 +263,7 @@ impl Chip8 {
 
     fn shr(&mut self, x: u16) {
         self.V[0xF] = self.V[x as usize] & 1;
-        self.V[x as usize] = self.V[x as usize] >> 1;
+        self.V[x as usize] >>= 1;
     }
 
     fn subn(&mut self, x: u16, y: u16) {
@@ -287,12 +277,12 @@ impl Chip8 {
 
     fn shl(&mut self, x: u16) {
         self.V[0xF] = self.V[x as usize] & 0x80;
-        self.V[x as usize] = self.V[x as usize ] << 1;
+        self.V[x as usize] <<= 1;
     }
 
     fn sne(&mut self, x: u16, y: u16) {
         if self.V[x as usize] != self.V[y as usize] {
-            self.pc = self.pc + 2;
+            self.pc += 2;
         }
     }
 
@@ -301,7 +291,7 @@ impl Chip8 {
     }
 
     fn jmp_v0_a(&mut self, nnn: u16) {
-        self.pc = self.pc + nnn + self.V[0x0] as u16;
+        self.pc += nnn + self.V[0x0] as u16;
     }
 
     fn rnd(&mut self, x: u16, kk: u16) {
@@ -353,13 +343,13 @@ impl Chip8 {
 
     fn skp_vx(&mut self, x: u16) {
         if self.key[self.V[x as usize] as usize] == 1 {
-            self.pc = self.pc + 2;    
+            self.pc += 2;    
         }
     }
 
     fn sknp_vx(&mut self, x: u16) {
         if self.key[self.V[x as usize] as usize] == 0 {
-            self.pc = self.pc + 2;    
+            self.pc += 2;    
         }
     }
 
@@ -378,7 +368,7 @@ impl Chip8 {
         }
 
         while !key_pressed {
-            self.pc = self.pc - 2;
+            self.pc -= 2;
         }
     }
 
@@ -399,7 +389,7 @@ impl Chip8 {
     }
 
     fn add_i_vx(&mut self, x: u16) {
-        self.I = self.I + self.V[x as usize] as u16;
+        self.I += self.V[x as usize] as u16;
     }
     
     fn ld_f_vx(&mut self, x: u16) {
@@ -434,17 +424,27 @@ impl Chip8 {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let filepath = &args[1];
+    const DISPLAY_WIDTH: u32 = 64;
+    const DISPLAY_HEIGHT: u32 = 32;
+    const PIXEL_SIZE: u32 = 10;
 
-    let mut chip8 = Chip8::new(filepath);
+    let args: Vec<String> = env::args().collect();
+    let filepath: &String = &args[1];
+
+    let mut chip8: Chip8 = Chip8::new(filepath);
 
     let mut rw = RenderWindow::new(
-        (640, 320),
+        (DISPLAY_WIDTH * PIXEL_SIZE, DISPLAY_HEIGHT * PIXEL_SIZE),
         "CHIP-8",
         Style::CLOSE,
         &ContextSettings::default(),
     );
+
+    let display: VideoMode = VideoMode::desktop_mode();
+    let x_center: i32 = (display.width   / 2 - rw.size().x / 2) as i32;
+    let y_center: i32 = (display.height  / 2 - rw.size().y / 2) as i32;
+
+    rw.set_position(Vector2i::new(x_center, y_center));
 
     let keypad = [
             Key::NUM1, Key::NUM2, Key::NUM3, Key::NUM4,
@@ -452,38 +452,35 @@ fn main() {
             Key::A,    Key::S,    Key::D,    Key::F,
             Key::Z,    Key::X,    Key::C,    Key::V
         ];
-
+    
     while rw.is_open() {
-        chip8.clockcycle(CLOCK_SLEEP);
-
         while let Some(ev) = rw.poll_event() {
             match ev {
                 Event::Closed => rw.close(),
                 _ => {}
             }
-        }       
-
-        for i in 0..16 {
-            chip8.key[i] = keypad[i].is_pressed() as u8;
         }
 
-        let mut shape = RectangleShape::default();
+        for (pos, key) in keypad.iter().enumerate() {
+            chip8.key[pos] = key.is_pressed() as u8;
+        }
 
-        for y in 0..DP_HEIGHT as usize {
-            for x in 0..DP_WIDTH as usize {
-                // shape.set_fill_color(Color::BLACK);
-                shape.set_size((PIXEL_WH as f32, PIXEL_WH as f32));
+        let mut shape: RectangleShape = RectangleShape::new();
+
+        for y in 0..DISPLAY_HEIGHT as usize {
+            for x in 0..DISPLAY_WIDTH as usize {
+                shape.set_size((PIXEL_SIZE as f32, PIXEL_SIZE as f32));
                 shape.set_position((
-                    STARTING_POINT.0 as f32 + (x as f32 * PIXEL_WH as f32),
-                    STARTING_POINT.1 as f32 + (y as f32 * PIXEL_WH as f32),
+                    x as f32 * PIXEL_SIZE as f32,
+                    y as f32 * PIXEL_SIZE as f32,
                 ));
 
                 let pixel_color = if chip8.gfx[y][x] == 1 {Color::WHITE} else {Color::BLACK};
-
                 shape.set_fill_color(pixel_color);
                 rw.draw(&shape);
             }
         }
+        chip8.clockcycle(CLOCK_SLEEP);
         rw.display();
     }
 }
