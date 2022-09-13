@@ -11,7 +11,7 @@ use sfml::{
     // TODO: audio::{Sound, SoundBuffer}
 };
 
-use std::{env, fs::File, io::Read, thread, time,};
+use std::{env, fs::File, io::Read, thread, time, cmp::Reverse,};
 use rand::Rng;
 
 
@@ -52,7 +52,6 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80 
 ];
 
-
 fn rom_from_file(filepath: &str) -> ([u8; 4096], usize) {
     let mut f = File::open(filepath).expect("File not found");
     let mut buf = [0u8; 4096];
@@ -65,24 +64,14 @@ fn rom_from_file(filepath: &str) -> ([u8; 4096], usize) {
     (buf, bytes_read)
 }
 
-fn parse_nr(xth: u16, opcode: u16) -> u16 {
-    match xth {
-        1 => opcode >> 12,
-        2 => opcode << 4 >> 12,
-        3 => opcode << 8 >> 12,
-        4 => opcode << 12 >> 12,
-        _ => 0x0,
-    }
-}
+fn split_opcode(opcode: u16) -> (u16, u16, u16, u16) {
+    let n1 = opcode / 0x1000;
+    let n2 = opcode % 0x1000 / 0x100;
+    let n3 = opcode % 0x100 / 0x10;
+    let n4 = opcode % 0x10 / 0x1;
 
-fn parse_last_nrs(amount: u16, opcode: u16) -> u16 {
-    match amount {
-        2 => opcode << 8 >> 8,
-        3 => opcode << 4 >> 4,
-        _ => 0x0,
-    }
+    (n1, n2, n3, n4)
 }
-
 pub trait JoinHexInt {
     fn join_hex_ints(&self) -> u16;
 }
@@ -131,34 +120,8 @@ impl Chip8 {
         }
     }
 
-    // pub fn exec_opcode(&mut self, opcode: u16 {
-
-    // }
-
-    
-    pub fn clockcycle(&mut self, sleep_time_ms: u64) {
-        // fetch
-        let mem_pc1 = self.memory[self.pc as usize] as u16;
-        let mem_pc2 = self.memory[self.pc as usize + 1] as u16;
-        self.opcode = mem_pc1 << 8 | mem_pc2;
-        self.pc += 2;
-
-        let oc = self.opcode;
-
-
-        let first_num = parse_nr(1, oc);
-        let second_num = parse_nr(2, oc);
-        let third_num = parse_nr(3, oc);
-        let last_num = parse_nr(4, oc);
-        let last_two = parse_last_nrs(2, oc);
-        let last_three = parse_last_nrs(3, oc);
-
-        let opcode_tuple = (first_num, second_num, third_num, last_num);
-
-        println!("Tuple:   ({first_num}, {second_num}, {third_num}, {last_num}), {last_two}, {last_three}");
-        
-
-        match opcode_tuple {
+    pub fn exec_opcode(&mut self, split_opcode: (u16, u16, u16, u16)) {
+        match split_opcode {
             (0x0, 0x0, 0xe, 0x0) => self.cls(),
             (0x0, 0x0, 0xe, 0xe) => self.ret(),
 
@@ -200,11 +163,25 @@ impl Chip8 {
             (0xF, x, 0x6, 0x5) => self.ld_vx_i(x),
             
             _ => {
+                let oc = self.opcode;
                 println!("Error, opcode: {oc}");
             },
         }       
+    }
+
+    
+    pub fn clockcycle(&mut self, sleep_time_ms: u64) {
+        let mem_pc1 = self.memory[self.pc as usize] as u16;
+        let mem_pc2 = self.memory[self.pc as usize + 1] as u16;
+        self.opcode = mem_pc1 << 8 | mem_pc2;
+        self.pc += 2;
+
+        let split_opcode: (u16, u16, u16, u16) = split_opcode(self.opcode);    
+        self.exec_opcode(split_opcode);
+
         // thread::sleep(time::Duration::from_millis(sleep_time_ms));
     }
+
 
     fn cls(&mut self) {
         self.gfx = [[0; 64]; 32];
@@ -332,7 +309,6 @@ impl Chip8 {
             for col_iter in 0..8 as u8 {
                 let sprite_iteration = (sprite_iterable & 0x80) >> 7;
                 let x_coord = (self.V[x as usize] + col_iter) % 64;
-
                 if sprite_iteration == 1 {
                     match self.gfx[y_coord as usize][x_coord as usize] {
                         1 => {
@@ -346,23 +322,6 @@ impl Chip8 {
             }
         }
     }  
-
-    //
-    // fn draw(&mut self, x: u16, y: u16, n: u16) {
-    //     self.V[0xF] = 0;
-
-    //     // What sleep deprivation does to a mfer
-    //     for ydir in 0..n {
-    //         let cur = self.memory[self.I as usize + ydir as usize];
-    //         let y_coord = (self.V[y as usize] as usize + ydir as usize) % 32;
-    //         for xdir in 0..8 {
-    //             let x_coord = (self.V[x as usize] as usize + xdir as usize) % 64;
-    //             let cell = (cur >> (7 - xdir)) & 1;
-    //             self.V[0xF] |= cell & self.gfx[y_coord as usize][x_coord as usize];
-    //             self.gfx[y_coord as usize][x_coord as usize] ^= cell;
-    //         }
-    //     }
-    // }
 
     fn skp_vx(&mut self, x: u16) {
         if self.key[self.V[x as usize] as usize] == 1 {
@@ -434,6 +393,7 @@ impl Chip8 {
         for i in 0..=x as usize{
             self.memory[self.I as usize + i] = self.V[i];
         }
+        // TODO: Maak aan of uitzetten van deze lijn code extern configureerbaar
         // self.I += x + 1;
     }
 
@@ -441,6 +401,7 @@ impl Chip8 {
         for i in 0..=x as usize{
             self.V[i] = self.memory[self.I as usize + i];
         }
+        // TODO: idem vorige functie
         // self.I += x + 1;
     }
 
