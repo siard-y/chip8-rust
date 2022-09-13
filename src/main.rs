@@ -119,6 +119,18 @@ impl Chip8 {
             key: [0; 16]
         }
     }
+    
+    pub fn clockcycle(&mut self, sleep_time_ms: u64) {
+        let mem_pc1 = self.memory[self.pc as usize] as u16;
+        let mem_pc2 = self.memory[self.pc as usize + 1] as u16;
+        self.opcode = mem_pc1 << 8 | mem_pc2;
+        self.pc += 2;
+
+        let split_opcode: (u16, u16, u16, u16) = split_opcode(self.opcode);    
+        self.exec_opcode(split_opcode);
+
+        // thread::sleep(time::Duration::from_millis(sleep_time_ms));
+    }
 
     pub fn exec_opcode(&mut self, split_opcode: (u16, u16, u16, u16)) {
         match split_opcode {
@@ -167,19 +179,6 @@ impl Chip8 {
                 println!("Error, opcode: {oc}");
             },
         }       
-    }
-
-    
-    pub fn clockcycle(&mut self, sleep_time_ms: u64) {
-        let mem_pc1 = self.memory[self.pc as usize] as u16;
-        let mem_pc2 = self.memory[self.pc as usize + 1] as u16;
-        self.opcode = mem_pc1 << 8 | mem_pc2;
-        self.pc += 2;
-
-        let split_opcode: (u16, u16, u16, u16) = split_opcode(self.opcode);    
-        self.exec_opcode(split_opcode);
-
-        // thread::sleep(time::Duration::from_millis(sleep_time_ms));
     }
 
 
