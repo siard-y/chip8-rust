@@ -475,8 +475,12 @@ fn main() {
                     y as f32 * PIXEL_SIZE as f32,
                 ));
 
-                let pixel_color = if chip8.gfx[y][x] == 1 {Color::WHITE} else {Color::BLACK};
-                shape.set_fill_color(pixel_color);
+                shape.set_fill_color(
+                    match chip8.gfx[y][x] {
+                        1 => Color::WHITE,
+                        _ => Color::BLACK,
+                });
+                
                 rw.draw(&shape);
             }
         }
