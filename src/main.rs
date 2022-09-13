@@ -1,7 +1,7 @@
 use sfml::{
     graphics::{
         Color, RectangleShape, RenderTarget,
-        RenderWindow, Shape, Transformable
+        RenderWindow, Shape, Transformable,
     },
     window::{
         ContextSettings, Event, 
@@ -11,7 +11,7 @@ use sfml::{
     // TODO: audio::{Sound, SoundBuffer}
 };
 
-use std::{env, fs::File, io::Read, thread, time};
+use std::{env, fs::File, io::Read, thread, time,};
 use rand::Rng;
 
 
@@ -83,6 +83,22 @@ fn parse_last_nrs(amount: u16, opcode: u16) -> u16 {
     }
 }
 
+pub trait JoinHexInt {
+    fn join_hex_ints(&self) -> u16;
+}
+
+impl JoinHexInt for (u16, u16) {
+    fn join_hex_ints(&self) -> u16 {
+        let (a, b) = self;
+        a * 0x10 + b * 0x1
+    }
+}
+impl JoinHexInt for (u16, u16, u16) {
+    fn join_hex_ints(&self) -> u16 {
+        let (a, b, c) = self;
+        a * 0x100 + b * 0x10 + c * 0x1
+    }
+}
 
 impl Chip8 {
     pub fn new(filepath: &str) -> Chip8 {
@@ -113,7 +129,11 @@ impl Chip8 {
             sp: 0,
             key: [0; 16]
         }
-    }    
+    }
+
+    // pub fn exec_opcode(&mut self, opcode: u16 {
+
+    // }
 
     
     pub fn clockcycle(&mut self, sleep_time_ms: u64) {
@@ -133,48 +153,51 @@ impl Chip8 {
         let last_two = parse_last_nrs(2, oc);
         let last_three = parse_last_nrs(3, oc);
 
-        let num_tuple = (first_num, second_num, third_num, last_num);
+        let opcode_tuple = (first_num, second_num, third_num, last_num);
 
-        match num_tuple {
+        println!("Tuple:   ({first_num}, {second_num}, {third_num}, {last_num}), {last_two}, {last_three}");
+        
+
+        match opcode_tuple {
             (0x0, 0x0, 0xe, 0x0) => self.cls(),
             (0x0, 0x0, 0xe, 0xe) => self.ret(),
 
-            (0x1, _, _, _) => self.jmp(last_three),
-            (0x2, _, _, _) => self.call(last_three),
-            (0x3, _, _, _) => self.se_vx_b(second_num, last_two),
-            (0x4, _, _, _) => self.sne_vx_b(second_num, last_two),
-            (0x5, _, _, 0x0) => self.se_vx_vy(second_num, third_num),
-            (0x6, _, _, _) => self.ld_vx_b(second_num, last_two),
-            (0x7, _, _, _) => self.add_vx_b(second_num, last_two),
+            (0x1, n1, n2, n3) => self.jmp((n1, n2, n3).join_hex_ints()),
+            (0x2, n1, n2, n3) => self.call((n1, n2, n3).join_hex_ints()),
+            (0x3, x, k1, k2) => self.se_vx_b(x, (k1, k2).join_hex_ints()),
+            (0x4, x, k1, k2) => self.sne_vx_b(x, (k1, k2).join_hex_ints()),
+            (0x5, x, y, 0x0) => self.se_vx_vy(x, y),
+            (0x6, x, k1, k2) => self.ld_vx_b(x, (k1, k2).join_hex_ints()),
+            (0x7, x, k1, k2) => self.add_vx_b(x, (k1, k2).join_hex_ints()),
 
-            (0x8, _, _, 0x0) => self.ld_vx_vy(second_num, third_num),    
-            (0x8, _, _, 0x1) => self.or(second_num, third_num),
-            (0x8, _, _, 0x2) => self.and(second_num, third_num),
-            (0x8, _, _, 0x3) => self.xor(second_num, third_num),
-            (0x8, _, _, 0x4) => self.add_vf(second_num, third_num),
-            (0x8, _, _, 0x5) => self.sub(second_num, third_num),
-            (0x8, _, _, 0x6) => self.shr(second_num),
-            (0x8, _, _, 0x7) => self.subn(second_num, third_num),
-            (0x8, _, _, 0xe) => self.shl(second_num),
-            (0x9, _, _, 0x0) => self.sne(second_num, third_num),
+            (0x8, x, y, 0x0) => self.ld_vx_vy(x, y),    
+            (0x8, x, y, 0x1) => self.or(x, y),
+            (0x8, x, y, 0x2) => self.and(x, y),
+            (0x8, x, y, 0x3) => self.xor(x, y),
+            (0x8, x, y, 0x4) => self.add_vf(x, y),
+            (0x8, x, y, 0x5) => self.sub(x, y),
+            (0x8, x, _y, 0x6) => self.shr(x),
+            (0x8, x, y, 0x7) => self.subn(x, y),
+            (0x8, x, _y, 0xe) => self.shl(x),
+            (0x9, x, y, 0x0) => self.sne(x, y),
 
-            (0xA, _, _, _) => self.ld_i_a(last_three),
-            (0xB, _, _, _) => self.jmp_v0_a(last_three),
-            (0xC, _, _, _) => self.rnd(second_num, last_two),
-            (0xD, _, _, _) => self.draw(second_num, third_num, last_num),
+            (0xA, n1, n2, n3) => self.ld_i_a((n1, n2, n3).join_hex_ints()),
+            (0xB, n1, n2, n3) => self.jmp_v0_a((n1, n2, n3).join_hex_ints()),
+            (0xC, x, k1, k2) => self.rnd(x, (k1, k2).join_hex_ints()),
+            (0xD, x, y, n) => self.draw(x, y, n),
             
-            (0xE, _, 0x9, 0xE) => self.skp_vx(second_num),
-            (0xE, _, 0xA, 0x1) => self.sknp_vx(second_num),
+            (0xE, x, 0x9, 0xE) => self.skp_vx(x),
+            (0xE, x, 0xA, 0x1) => self.sknp_vx(x),
 
-            (0xF, _, 0x0, 0x7) => self.ld_vx_dt(second_num),
-            (0xF, _, 0x0, 0xA) => self.ld_vx_k(second_num),
-            (0xF, _, 0x1, 0x5) => self.ld_dt_vx(second_num),
-            (0xF, _, 0x1, 0x8) => self.ld_st_vx(second_num),
-            (0xF, _, 0x1, 0xE) => self.add_i_vx(second_num),
-            (0xF, _, 0x2, 0x9) => self.ld_f_vx(second_num),
-            (0xF, _, 0x3, 0x3) => self.ld_vx(second_num),
-            (0xF, _, 0x5, 0x5) => self.ld_i_vx(second_num),
-            (0xF, _, 0x6, 0x5) => self.ld_vx_i(second_num),
+            (0xF, x, 0x0, 0x7) => self.ld_vx_dt(x),
+            (0xF, x, 0x0, 0xA) => self.ld_vx_k(x),
+            (0xF, x, 0x1, 0x5) => self.ld_dt_vx(x),
+            (0xF, x, 0x1, 0x8) => self.ld_st_vx(x),
+            (0xF, x, 0x1, 0xE) => self.add_i_vx(x),
+            (0xF, x, 0x2, 0x9) => self.ld_f_vx(x),
+            (0xF, x, 0x3, 0x3) => self.ld_vx(x),
+            (0xF, x, 0x5, 0x5) => self.ld_i_vx(x),
+            (0xF, x, 0x6, 0x5) => self.ld_vx_i(x),
             
             _ => {
                 println!("Error, opcode: {oc}");
@@ -454,6 +477,8 @@ fn main() {
         ];
     
     while rw.is_open() {
+        chip8.clockcycle(CLOCK_SLEEP);
+
         while let Some(ev) = rw.poll_event() {
             match ev {
                 Event::Closed => rw.close(),
@@ -484,7 +509,6 @@ fn main() {
                 rw.draw(&shape);
             }
         }
-        chip8.clockcycle(CLOCK_SLEEP);
         rw.display();
     }
 }
