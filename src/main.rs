@@ -11,7 +11,7 @@ use sfml::{
     // TODO: audio::{Sound, SoundBuffer}
 };
 
-use std::{env, fs::File, io::Read, thread, time, cmp::Reverse,};
+use std::{env, fs::File, io::Read, thread, time,};
 use rand::Rng;
 
 
@@ -72,6 +72,7 @@ fn split_opcode(opcode: u16) -> (u16, u16, u16, u16) {
 
     (n1, n2, n3, n4)
 }
+
 pub trait JoinHexInt {
     fn join_hex_ints(&self) -> u16;
 }
